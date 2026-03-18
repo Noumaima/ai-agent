@@ -1,0 +1,25 @@
+# Proxmox
+proxmox_endpoint   = "https://10.100.1.3:8006/api2/json"
+proxmox_api_token  = "root@pam!terraform=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+proxmox_insecure   = true
+proxmox_node       = "abrdia-pve1"
+template_name      = "ubuntu-server-template-24-04-LTS"
+datastore          = "local-lvm"
+bridge             = "vmbr0"
+
+# VM access
+vm_user        = "ubuntu"
+ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI"
+
+# Network
+gateway            = "192.168.1.1"
+subnet_cidr_prefix = 24
+ip_start           = "192.168.1.101"
+dns_servers        = ["1.1.1.1", "8.8.8.8"]
+
+# Cluster sizing
+cluster_name = "ahk"
+vm_count     = 3
+cpu_cores    = 2
+memory_mb    = 4096
+disk_gb      = 30
