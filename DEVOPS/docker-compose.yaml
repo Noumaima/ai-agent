@@ -104,7 +104,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: frontend/Dockerfile
+      dockerfile: Frontend/Dockerfile
     container_name: react_frontend
     depends_on:
       - backend

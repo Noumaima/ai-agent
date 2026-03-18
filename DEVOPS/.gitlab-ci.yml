@@ -1,24 +1,121 @@
-stages: 
-  - build 
-  - test 
-  - deploy 
-variables:
-  DOCKER_IMAGE_FRONT: "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHORT_SHA"
+# Ordre global du pipeline
+# 1) Analyse qualité (Sonar)
+# 2) Build des images Docker
+# 3) Scan sécurité des images
+# 4) Déploiement env. develop
+# 5) Déploiement env. qualification
+stages:
+  - sonar
+  - build
+  - scan 
+  - deploy
+  - qualif-deploy
 
-docker_build_frontend:
+# Lance l'analyse SonarQube via le template .sonarscan
+# FOLDER indique le dossier source à analyser
+sonarscan:
+  extends: .sonarscan
+  variables:
+    FOLDER: API
+
+# Build principal de l'image applicative
+# Exécuté uniquement sur les branches develop et main
+build:
+  extends: .build_docker
+  tags:
+    - runner
+  only:
+    - develop
+    - main
+
+# Build d'une image "init" dédiée (ex: migration/init DB)
+# Utilise un Dockerfile spécifique
+build-init:
+  extends: .build_docker
   stage: build
-  image: docker:24
-  services:
-    - docker:24-dind
-  script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker build -t $DOCKER_IMAGE_FRONT ./
-    - docker push $DOCKER_IMAGE_FRONT
+  variables:
+    CONTAINER_IMAGE: ${REGISTRY}/addinn/${CI_PROJECT_PATH_SLUG}-init
+    DOCKERFILE: Dockerfile-init
+  tags:
+    - runner
+  only:
+    - develop
+    - main
 
-deploy_kuberntes:
-  - stage: deploy
-    image: bitnami/kubectl:latest
-    script: 
-      - mkdir -p ~/.kube
-      -  echo "$KUBE_CONFIG_DATA" | base64 -d > ~/.kube/config
-      - kubectl apply -f k8s/frontend-deployment.yaml
+# Scan de vulnérabilités de l'image Docker avec Trivy
+# Le job échoue si des vulnérabilités HIGH/CRITICAL sont trouvées
+trivy-scan:
+  stage: scan
+  image:
+    name: aquasec/trivy:0.51.1
+    entrypoint: [""]
+  tags:
+    - runner
+  variables:
+    TRIVY_CACHE_DIR: ".trivycache"
+    TRIVY_NO_PROGRESS: "true"
+    TRIVY_SEVERITY: "CRITICAL,HIGH" # Limite aux sévérités importantes
+  cache:
+    key: trivy-cache
+    paths:
+      - .trivycache/
+  script:
+    - trivy --version
+    # Login au registry (si requis) pour scanner une image privée
+    - |
+      if [ -n "${CI_REGISTRY}" ]; then
+        echo "${CI_REGISTRY_PASSWORD}" | trivy registry login --username "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}" || true
+      fi
+    # Scan de l'image générée au build
+    - echo "Scanning image: ${CONTAINER_IMAGE}:${HELM_IMAGE_TAG}"
+    - trivy image --exit-code 1 --severity "${TRIVY_SEVERITY}" "${CONTAINER_IMAGE}:${HELM_IMAGE_TAG}"
+  only:
+    - develop
+    - main
+  allow_failure: false
+
+# Déploiement Kubernetes en environnement develop via template .deploy
+# HELM_OPTS surcharge le host ingress + l'image de l'initContainer
+k8s-deploy:develop:
+  extends: .deploy
+  variables:
+     HELM_OPTS: "--set ingress.host=portail-client.${DEVELOP_DOMAIN} --set initContainers[0].name=init-database --set initContainers[0].image=${CONTAINER_IMAGE}-init:${HELM_IMAGE_TAG}"
+  tags:
+    - runner-dev
+
+# Déploiement Kubernetes en environnement qualification
+# Utilise un template différent pour les règles de qualif
+k8s-deploy:qualif:
+  extends: .qualif-deploy-main
+  variables:
+     HELM_OPTS: "--set ingress.host=portail-client.${QUALIF_DOMAIN_ABRIDIA} --set initContainers[0].name=init-database --set initContainers[0].image=${CONTAINER_IMAGE}-init:${HELM_IMAGE_TAG}"
+  tags:
+    - runner-dev
+
+# Inclusion des templates CI mutualisés depuis le projet library/stages
+# Ces fichiers définissent les jobs "cachés" utilisés par extends
+include:
+  - project: 'library/stages'
+    ref: master
+    file: 'gitlab/helm/deploy_hidden_qualif.yaml'
+  - project: 'library/stages'
+    ref: master
+    file: 'gitlab/sonar/sonarscan_hidden_dotnet.yaml'
+  - project: 'library/stages'
+    ref: master
+    file: 'gitlab/migration/migration_hidden.yaml'
+  - project: 'library/stages'
+    ref: master
+    file: 'gitlab/helm/deploy_hidden.yaml'
+  - project: 'library/stages'
+    ref: master
+    file: 'gitlab/docker/build_hidden.yaml'
+  - project: 'library/stages'
+    ref: master
+    file: 'gitlab/helm/production_hidden2.yaml'
+  - project: 'library/stages'
+    ref: master
+    file: 'gitlab/helm/staging_hidden.yaml'
+  - project: 'library/stages'
+    ref: master
+    file: '/gitlab/footer.yaml'
