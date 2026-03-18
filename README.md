@@ -184,7 +184,100 @@ Donc dans React, appelle l’API via :
 
 ---
 
-## 10) Dépannage (problèmes fréquents)
+## 10) Patroni (PostgreSQL HA) — Détails
+
+Cette section explique comment structurer un **cluster PostgreSQL HA** avec **Patroni** au lieu d’un Postgres “standalone”.
+
+### 10.1) C’est quoi Patroni ?
+**Patroni** est un outil de haute disponibilité pour PostgreSQL qui gère :
+- l’élection du **leader** (primary),
+- le **failover** automatique,
+- la configuration de la **réplication**,
+- la cohérence du cluster via un **DCS** (*Distributed Configuration Store*).
+
+Patroni ne “remplace” pas PostgreSQL : il **orchestre** PostgreSQL.
+
+### 10.2) DCS : etcd / Consul / ZooKeeper
+Patroni a besoin d’un DCS pour stocker l’état du cluster et coordonner le leader.
+Le choix le plus courant en conteneurs est **etcd**.
+
+Dans Docker Compose, un design simple est :
+- `etcd` (1 noeud en dev)
+- `patroni-1`, `patroni-2`, `patroni-3` (Postgres + Patroni)
+- (optionnel) `haproxy` (un endpoint unique pour l’app)
+
+> En production, etcd doit être en cluster (3 ou 5 noeuds). Un seul etcd en dev est OK uniquement pour test.
+
+### 10.3) Pourquoi ajouter HAProxy ?
+Sans HAProxy (ou PgBouncer/ProxySQL), ton application doit savoir “qui est le leader”.
+Avec HAProxy :
+- l’app se connecte toujours à `haproxy:5432`
+- HAProxy envoie vers le **leader** (write)
+- (optionnel) un autre port envoie vers les **replicas** (read)
+
+### 10.4) Ports et endpoints recommandés
+- HAProxy write (leader) : `5432`
+- HAProxy read (replicas) : `5433` (optionnel)
+- Patroni REST API : `8008` sur chaque noeud (pour health checks)
+- Postgres : `5432` sur chaque noeud Patroni
+
+### 10.5) Variables Django à adapter
+Au lieu de `DB_HOST=postgres`, tu mettras typiquement :
+- `DB_HOST=haproxy`
+- `DB_PORT=5432`
+- `DB_NAME=appdb`
+- `DB_USER=appuser`
+- `DB_PASSWORD=...`
+
+### 10.6) Exemple d’architecture Docker Compose (concept)
+**Objectif** : remplacer `postgres` par `patroni` + `etcd` (+ `haproxy`).
+
+Services:
+- `etcd` : coordination
+- `patroni1`, `patroni2`, `patroni3` : noeuds Postgres managés par Patroni
+- `haproxy` : endpoint DB pour l’application
+
+### 10.7) Flux de fonctionnement (leader/failover)
+1. Patroni démarre PostgreSQL sur chaque noeud.
+2. Patroni consulte le DCS (etcd) :
+   - si aucun leader n’existe, un noeud se proclame leader.
+3. Les autres noeuds deviennent replicas et se synchronisent.
+4. Si le leader tombe :
+   - Patroni détecte l’échec (TTL/healthcheck via DCS),
+   - une élection se fait,
+   - un replica est promu leader,
+   - HAProxy redirige automatiquement les connexions vers le nouveau leader.
+
+### 10.8) Tests de base (à faire en entretien / démo)
+- Vérifier l’état du cluster via l’API Patroni (port 8008).
+- Stopper le leader et observer la promotion d’un replica.
+- Vérifier que l’application continue à fonctionner via HAProxy.
+
+Exemples (conceptuels) :
+```bash
+# voir les services
+docker compose ps
+
+# logs patroni
+docker compose logs -f patroni1
+
+# simuler une panne
+docker compose stop patroni1
+# observer l’élection et la promotion
+```
+
+### 10.9) Notes importantes (production)
+- Ajouter du monitoring (Prometheus, Grafana).
+- Mettre les volumes (données Postgres) sur du stockage fiable.
+- Gérer les secrets (passwords) via un secret manager.
+- Mettre etcd en cluster (3/5 noeuds).
+- Configurer des politiques de sauvegarde (pgBackRest, wal-g, etc.).
+
+> Cette section décrit le “pourquoi/comment”. Si tu veux, je peux aussi te générer un `docker-compose.patroni.yml` complet (etcd + 3 patroni + haproxy) adapté à tes noms de DB/users.
+
+---
+
+## 11) Dépannage (problèmes fréquents)
 
 ### A) "ModuleNotFoundError: config"
 Le module WSGI dans `backend/Dockerfile` doit correspondre à ton projet :
@@ -201,14 +294,7 @@ Ajuster le `frontend/Dockerfile` en conséquence.
 
 ### C) Connexion DB
 Vérifie que Django utilise bien les variables :
-- host = `postgres`
+- host = `postgres` (ou `haproxy` si Patroni)
 - port = `5432`
-
----
-
-## 11) Roadmap (optionnel)
-- Ajouter un service `celery_beat` (tâches planifiées)
-- Ajouter un reverse proxy unique (Traefik) + HTTPS
-- Ajouter CI/CD (GitLab CI) pour build + push images + deploy
 
 ---
