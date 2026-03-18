@@ -1,0 +1,26 @@
+---
+description: Project architecture & folder structure (modules/routes/ui/api)
+alwaysApply: true
+---
+
+# Project structure rules
+
+- Use the existing folder layout; **don’t introduce new top-level patterns** without a strong reason.
+- Prefer `@/` imports for anything in `src/` (alias is configured in `tsconfig` and `vite.config.ts`).
+
+## Where code goes
+
+- `src/modules/public/**`: public screens/features
+- `src/modules/private/**`: authenticated screens/features
+- `src/routes/**`: router/provider + route exports (single source of navigation)
+- `src/components/**`: shared reusable components (cross-module)
+- `src/components/ui/**`: shadcn/ui components and re-exports
+- `src/api/**`: endpoint definitions + API helpers
+- `src/types/**`: shared types (e.g. route typing)
+- `src/providers/**`: React providers composition
+- `src/layout/**`: app/page layout shells
+
+## Export conventions
+
+- Prefer **barrel exports** via `index.ts` inside `modules/*` and `routes/` to keep imports stable.
+- Keep module internals private; only export the module entry surface from its `index.ts`.
