@@ -1,13 +1,17 @@
-FROM node:8.11.1 as node
+# build
+FROM node:20-alpine AS build
 WORKDIR /app
-COPY package.json /app/
-RUN npm install
-COPY ./ /app/
-ARG env=prod
-RUN npm run build -- --prod --environment $env
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
 
-# Stage 1, based on Nginx, to have only the compiled app, ready for production with Nginx
-FROM nginx:1.13
-COPY --from=node /app/dist/ /usr/share/nginx/html
-COPY ./default.conf /etc/nginx/conf.d/default.conf
-EXPOSE 3000
+# serve
+FROM nginx:1.27-alpine
+COPY --from=build /app/build /usr/share/nginx/html
+
+# Nginx config (proxy /api vers django)
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
