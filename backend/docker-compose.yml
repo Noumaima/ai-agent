@@ -1,0 +1,83 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  redis:
+    image: redis:7.0.11-alpine
+    container_name: redis
+
+  flower:
+    image: mher/flower
+    env_file:
+      - .env
+    ports:
+      - "5555:5555"
+    environment:
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+    depends_on:
+      - rabbitmq
+
+  django:
+    container_name: django
+    build:
+      context: ./task_board
+    command: gunicorn task_board.wsgi:application --bind 0.0.0.0:8000 --workers 3
+    env_file:
+      - .env
+    volumes:
+      - ./task_board:/usr/src/app/
+    ports:
+      - "8001:8000"
+    depends_on:
+      - postgres
+      - rabbitmq
+      - redis
+
+  celery:
+    container_name: celery
+    build:
+      context: ./task_board
+    command: celery --app=task_board worker -l INFO -Q agent_execution,dead_letter
+    env_file:
+      - .env
+    volumes:
+      - ./task_board:/usr/src/app/
+    depends_on:
+      - postgres
+      - rabbitmq
+      - redis
+
+  celery-beat:
+    container_name: celery-beat
+    build:
+      context: ./task_board
+    command: celery --app=task_board beat -l INFO
+    env_file:
+      - .env
+    volumes:
+      - ./task_board:/usr/src/app/
+    depends_on:
+      - postgres
+      - rabbitmq
+      - redis
+
+volumes:
+  postgres_data:
