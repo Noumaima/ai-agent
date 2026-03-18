@@ -1,0 +1,12 @@
+---
+description: React/TypeScript conventions (imports, types, file placement)
+globs: src/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# React + TypeScript conventions
+
+- Prefer **named exports** for reusable components and utilities; default export only for framework entrypoints when needed.
+- Prefer `@/` imports over relative imports when crossing folders (especially across modules).
+- Keep types close when module-specific; put shared types in `src/types/`.
+- Keep UI primitives in `src/components/ui/`; put app-specific composed components in `src/components/` or in the owning module.
