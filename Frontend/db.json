@@ -1,0 +1,48 @@
+{
+  "tasks": [
+    {
+      "id": "2",
+      "title": "Implement task card UI",
+      "description": "Build reusable Kanban card component and ensure responsive behavior for small screens.",
+      "dueDate": "2030-01-20",
+      "frequency": "daily",
+      "category": "Dev",
+      "status": "in_progress",
+      "createdAt": "2030-01-02T10:30:00.000Z",
+      "priority": 0
+    },
+    {
+      "id": "3",
+      "title": "QA review",
+      "description": "Verify validations: future date, required fields, status transitions, and API error states.",
+      "dueDate": "2030-01-25",
+      "frequency": "monthly",
+      "category": "QA",
+      "status": "done",
+      "createdAt": "2030-01-03T14:15:00.000Z"
+    },
+    {
+      "id": "50a8",
+      "title": "azeaze",
+      "description": "azeaze",
+      "dueDate": "2026-03-29",
+      "frequency": "weekly",
+      "category": "Dev",
+      "status": "todo",
+      "createdAt": "2026-03-18T13:23:24.931Z",
+      "priority": 1
+    },
+    {
+      "id": "f4e6",
+      "title": "new Task",
+      "description": "New Task Description",
+      "dueDate": "2026-04-05T19:24:00.000Z",
+      "frequency": "daily",
+      "category": "Design",
+      "status": "in_progress",
+      "createdAt": "2026-03-18T14:19:24.119Z",
+      "priority": 1
+    }
+  ],
+  "$schema": "./node_modules/json-server/schema.json"
+}
